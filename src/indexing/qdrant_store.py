@@ -60,7 +60,7 @@ class QdrantStore:
         """Ensure required payload indexes exist (idempotent)."""
         info = self.client.get_collection(self.collection)
         existing = set(info.payload_schema.keys()) if info.payload_schema else set()
-        for field in ("db_type", "notion_id"):
+        for field in ("db_type", "notion_id", "status", "owner", "type"):
             if field not in existing:
                 self.client.create_payload_index(
                     collection_name=self.collection,
@@ -122,9 +122,10 @@ class QdrantStore:
         vector: list[float],
         top_k: int = 20,
         db_type: str | None = None,
+        filters: dict[str, str] | None = None,
     ) -> list[models.ScoredPoint]:
-        """Search by dense vector with optional db_type filter."""
-        query_filter = _build_filter(db_type)
+        """Search by dense vector with optional filters."""
+        query_filter = _build_filter(db_type, filters)
         return self.client.query_points(
             collection_name=self.collection,
             query=vector,
@@ -139,9 +140,10 @@ class QdrantStore:
         sparse_vector: dict,
         top_k: int = 20,
         db_type: str | None = None,
+        filters: dict[str, str] | None = None,
     ) -> list[models.ScoredPoint]:
-        """Search by sparse vector with optional db_type filter."""
-        query_filter = _build_filter(db_type)
+        """Search by sparse vector with optional filters."""
+        query_filter = _build_filter(db_type, filters)
         return self.client.query_points(
             collection_name=self.collection,
             query=models.SparseVector(
@@ -158,16 +160,26 @@ class QdrantStore:
         return self.client.count(collection_name=self.collection).count
 
 
-def _build_filter(db_type: str | None) -> models.Filter | None:
-    if not db_type:
+FILTERABLE_FIELDS = {"db_type", "status", "owner", "type", "scope"}
+
+
+def _build_filter(
+    db_type: str | None = None, filters: dict[str, str] | None = None
+) -> models.Filter | None:
+    conditions = []
+    if db_type:
+        conditions.append(
+            models.FieldCondition(key="db_type", match=models.MatchValue(value=db_type))
+        )
+    if filters:
+        for key, value in filters.items():
+            if key in FILTERABLE_FIELDS and value:
+                conditions.append(
+                    models.FieldCondition(key=key, match=models.MatchValue(value=value))
+                )
+    if not conditions:
         return None
-    return models.Filter(
-        must=[
-            models.FieldCondition(
-                key="db_type", match=models.MatchValue(value=db_type)
-            )
-        ]
-    )
+    return models.Filter(must=conditions)
 
 
 def _deterministic_uuid(key: str) -> str:

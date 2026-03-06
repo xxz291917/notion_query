@@ -31,6 +31,7 @@ class HybridSearcher:
         query: str,
         top_k: int | None = None,
         db_type: str | None = None,
+        filters: dict[str, str] | None = None,
         rerank: bool = True,
     ) -> list[dict]:
         """Execute hybrid search.
@@ -38,6 +39,7 @@ class HybridSearcher:
         Args:
             query: Search query text.
             db_type: Optional filter by database type.
+            filters: Optional field filters (status, owner, type, scope).
             top_k: Number of final results (default: settings.rerank_top_k).
             rerank: Whether to apply cross-encoder reranking.
 
@@ -56,8 +58,12 @@ class HybridSearcher:
         }
 
         # 2. Dual retrieval
-        dense_hits = self.store.search_dense(dense_vec, top_k=retrieve_k, db_type=db_type)
-        sparse_hits = self.store.search_sparse(sparse_vec, top_k=retrieve_k, db_type=db_type)
+        dense_hits = self.store.search_dense(
+            dense_vec, top_k=retrieve_k, db_type=db_type, filters=filters
+        )
+        sparse_hits = self.store.search_sparse(
+            sparse_vec, top_k=retrieve_k, db_type=db_type, filters=filters
+        )
 
         # 3. RRF fusion
         fused = _rrf_fusion(dense_hits, sparse_hits, k=60)
