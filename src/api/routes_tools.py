@@ -28,16 +28,19 @@ class ToolSearchResponse(BaseModel):
 def _tool_search(request: Request, req: ToolSearchRequest, db_type: str) -> ToolSearchResponse:
     """Shared logic for specialized tool endpoints."""
     searcher = request.app.state.searcher
-    results = searcher.search(query=req.query, top_k=req.top_k, db_type=db_type)
+    has_post_filter = req.status or req.priority
+    retrieve_k = req.top_k * 3 if has_post_filter else req.top_k
+    results = searcher.search(query=req.query, top_k=retrieve_k, db_type=db_type)
 
     tool_results = []
     for r in results:
         meta = r.get("metadata", {})
-        # Apply post-filters on structured fields
         if req.status and meta.get("status", "").lower() != req.status.lower():
             continue
         if req.priority and meta.get("priority", "").lower() != req.priority.lower():
             continue
+        if len(tool_results) >= req.top_k:
+            break
         tool_results.append(
             ToolResult(
                 title=meta.get("title", ""),

@@ -32,6 +32,18 @@ class NotionClient:
 
         return _do_call()
 
+    def _raw_get(self, path: str) -> dict:
+        """Execute a raw GET request via the SDK's internal HTTP client."""
+        self.rate_limiter.acquire()
+
+        @self.retry_policy.retry
+        def _do_call():
+            return self.circuit_breaker.call(
+                self.client.request, path=path, method="GET"
+            )
+
+        return _do_call()
+
     # ── Discovery ──
 
     def list_databases(self) -> list[dict]:
@@ -93,20 +105,10 @@ class NotionClient:
     def get_page(self, page_id: str) -> dict:
         return self._call(self.client.pages.retrieve, page_id=page_id)
 
-    def get_blocks(self, block_id: str) -> list[dict]:
-        """Recursively fetch all blocks for a page."""
-        blocks = []
-        kwargs: dict[str, Any] = {"block_id": block_id, "page_size": 100}
-        while True:
-            response = self._call(self.client.blocks.children.list, **kwargs)
-            for block in response["results"]:
-                blocks.append(block)
-                if block.get("has_children"):
-                    block["children"] = self.get_blocks(block["id"])
-            if not response.get("has_more"):
-                break
-            kwargs["start_cursor"] = response["next_cursor"]
-        return blocks
+    def get_page_markdown(self, page_id: str) -> str:
+        """Fetch full page content as Markdown via the SDK (single API call)."""
+        result = self._raw_get(f"pages/{page_id}/markdown")
+        return result.get("markdown", "")
 
     # ── Database metadata ──
 

@@ -6,14 +6,13 @@ interrupted syncs can continue from where they left off.
 
 import json
 import logging
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 from src.config import settings
 from src.indexing.chunker import chunk_document
 from src.indexing.embedder import Embedder
 from src.indexing.qdrant_store import QdrantStore
-from src.notion.block_parser import blocks_to_markdown
 from src.notion.client import NotionClient
 from src.notion.extractor import page_to_document
 
@@ -69,6 +68,7 @@ class SyncEngine:
             logger.info(f"  {db_name}: {count} chunks indexed")
 
             completed_dbs.add(db_name)
+            synced_pages.clear()  # completed_dbs already skips this db on resume
             state = self._load_state()
             self._save_in_progress(state, "full", synced_pages, completed_dbs)
 
@@ -122,6 +122,7 @@ class SyncEngine:
             total_chunks += count
 
             completed_dbs.add(db_name)
+            synced_pages.clear()
             state = self._load_state()
             self._save_in_progress(
                 state, "incremental", synced_pages, completed_dbs, since=since
@@ -159,8 +160,7 @@ class SyncEngine:
                 continue
 
             try:
-                blocks = self.notion.get_blocks(notion_id)
-                md = blocks_to_markdown(blocks)
+                md = self.notion.get_page_markdown(notion_id)
                 doc = page_to_document(page, md, db_name=db_name)
                 chunks = chunk_document(doc)
 
@@ -196,8 +196,9 @@ class SyncEngine:
     def _embed_and_upsert(self, chunks: list[dict]) -> int:
         """Embed a batch of chunks and upsert into Qdrant."""
         texts = [c["text"] for c in chunks]
-        for dense_vecs, sparse_vecs in self.embedder.embed_batch(texts):
-            self.store.upsert_chunks(chunks, dense_vecs, sparse_vecs)
+        dense_vecs = self.embedder.embed_dense(texts)
+        sparse_vecs = self.embedder.embed_sparse(texts)
+        self.store.upsert_chunks(chunks, dense_vecs, sparse_vecs)
         return len(chunks)
 
     # ── Checkpoint persistence ──
@@ -226,7 +227,7 @@ class SyncEngine:
         progress = {
             "mode": mode,
             "started_at": state.get("in_progress", {}).get(
-                "started_at", datetime.utcnow().isoformat()
+                "started_at", datetime.now(UTC).isoformat()
             ),
             "synced_pages": list(synced_pages),
             "completed_dbs": list(completed_dbs),
@@ -246,7 +247,7 @@ class SyncEngine:
     def _finish_sync(self) -> None:
         """Mark sync as complete: update last_sync and clear in_progress."""
         state = self._load_state()
-        state["last_sync"] = datetime.utcnow().isoformat()
+        state["last_sync"] = datetime.now(UTC).isoformat()
         state.pop("in_progress", None)
         self._save_state(state)
 
