@@ -10,6 +10,10 @@ class SearchRequest(BaseModel):
     query: str
     top_k: int = Field(default=5, ge=1, le=50)
     db_type: str | None = Field(default=None, description="Filter by database type")
+    filters: dict[str, str] | None = Field(
+        default=None,
+        description="Field filters: status, owner, type, scope. E.g. {\"status\": \"In progress\"}",
+    )
     rerank: bool = True
 
 
@@ -33,6 +37,7 @@ def search(req: SearchRequest, request: Request):
         query=req.query,
         top_k=req.top_k,
         db_type=req.db_type,
+        filters=req.filters,
         rerank=req.rerank,
     )
     return SearchResponse(
