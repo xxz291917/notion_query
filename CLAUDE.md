@@ -24,6 +24,9 @@ python scripts/full_sync.py --mode incremental    # delta sync since last run
 # Run API server
 uvicorn src.api.app:app --reload
 
+# Run MCP server (stdio, for Claude Code / Cursor / Cline)
+python -m src.mcp_server
+
 # Lint
 ruff check src/ scripts/
 ruff format src/ scripts/
@@ -33,9 +36,9 @@ ruff format src/ scripts/
 
 Four-layer pipeline: **Notion extraction -> Indexing -> Retrieval -> API**
 
-**Data flow:** Notion API -> `NotionClient` (rate-limited, circuit-breaker protected) -> `extractor` (properties -> metadata) + `block_parser` (blocks -> markdown) -> `chunker` (structured records kept whole, long docs split recursively) -> `Embedder` (FastEmbed: BGE-M3 dense 1024d + BM42 sparse) -> `QdrantStore` (dual-vector upsert with deterministic UUIDs)
+**Data flow:** Notion API -> `NotionClient` (rate-limited, circuit-breaker protected) -> `get_page_markdown()` (single API call per page) -> `extractor` (properties -> metadata) -> `chunker` (structured records kept whole, long docs split recursively) -> `Embedder` (FastEmbed: multilingual-e5-large dense 1024d + BM42 sparse) -> `QdrantStore` (dual-vector upsert with deterministic UUIDs)
 
-**Search flow:** Query -> `HybridSearcher` encodes query with both models -> parallel dense + sparse search in Qdrant -> RRF fusion (no weight tuning) -> CrossEncoder rerank (BGE-Reranker-v2-m3) -> top-K results
+**Search flow:** Query -> `HybridSearcher` encodes query with both models -> parallel dense + sparse search in Qdrant -> RRF fusion (no weight tuning) -> CrossEncoder rerank (jina-reranker-v2-base-multilingual) -> top-K results
 
 **Key design decisions:**
 - All embeddings via FastEmbed (ONNX, no PyTorch). Dense, sparse, and reranker all in one library.

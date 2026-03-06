@@ -1,4 +1,4 @@
-"""Embedding layer: dense (BGE-M3) + sparse (BM42) via FastEmbed."""
+"""Embedding layer: dense (multilingual-e5-large) + sparse (BM42) via FastEmbed."""
 
 import logging
 from typing import Iterator
@@ -24,7 +24,7 @@ class Embedder:
         )
 
     def embed_dense(self, texts: list[str]) -> list[list[float]]:
-        """Generate dense embeddings. Returns list of 1024-dim vectors."""
+        """Generate dense embeddings (multilingual-e5-large, 1024-dim)."""
         return [vec.tolist() for vec in self.dense.embed(texts)]
 
     def embed_sparse(self, texts: list[str]) -> list[dict]:

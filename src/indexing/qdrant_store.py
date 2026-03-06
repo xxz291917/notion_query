@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 DENSE_VECTOR_NAME = "dense"
 SPARSE_VECTOR_NAME = "sparse"
-DENSE_DIM = 1024  # BGE-M3
+DENSE_DIM = 1024  # intfloat/multilingual-e5-large
 
 
 class QdrantStore:
@@ -26,6 +26,7 @@ class QdrantStore:
         collections = [c.name for c in self.client.get_collections().collections]
         if self.collection in collections:
             logger.info(f"Collection '{self.collection}' already exists")
+            self._ensure_indexes()
             return
 
         self.client.create_collection(
@@ -42,13 +43,31 @@ class QdrantStore:
                 ),
             },
         )
-        # Index on db_type for filtered search
+        # Indexes for filtered search and incremental delete
         self.client.create_payload_index(
             collection_name=self.collection,
             field_name="db_type",
             field_schema=models.PayloadSchemaType.KEYWORD,
         )
+        self.client.create_payload_index(
+            collection_name=self.collection,
+            field_name="notion_id",
+            field_schema=models.PayloadSchemaType.KEYWORD,
+        )
         logger.info(f"Created collection '{self.collection}' with dense + sparse vectors")
+
+    def _ensure_indexes(self) -> None:
+        """Ensure required payload indexes exist (idempotent)."""
+        info = self.client.get_collection(self.collection)
+        existing = set(info.payload_schema.keys()) if info.payload_schema else set()
+        for field in ("db_type", "notion_id"):
+            if field not in existing:
+                self.client.create_payload_index(
+                    collection_name=self.collection,
+                    field_name=field,
+                    field_schema=models.PayloadSchemaType.KEYWORD,
+                )
+                logger.info(f"Created index on '{field}'")
 
     def upsert_chunks(
         self,

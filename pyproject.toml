@@ -19,6 +19,8 @@ dependencies = [
     "apscheduler>=3.10.0",
     # Config
     "pydantic-settings>=2.6.0",
+    # MCP
+    "mcp[cli]>=1.0.0",
     # Logging
     "structlog>=24.0.0",
 ]
